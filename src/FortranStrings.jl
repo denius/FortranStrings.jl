@@ -4,8 +4,8 @@ export FortranString, @F_str, @F8_str
 
 """
     FortranString{CharType}
-Datatype for FORTRAN CHARACTER*N strings emulation.
-The type parameter `CharType` specifies the type of elements in strings.
+Datatype for FORTRAN `CHARACTER*N` strings emulation.
+The type parameter `CharType` specifies the type of elements in string.
 """
 mutable struct FortranString{CharType} <: AbstractString
     data :: Array{CharType, 1}
@@ -16,7 +16,6 @@ end
 Base.convert(::Type{FortranString{T}}, str::AbstractString) where {T} = FortranString{T}(str)
 Base.convert(::Type{String}, fstr::FortranString{T}) where {T} = join(map(Char, fstr.data))
 
-# is it need?
 Base.promote_rule(::Type{Union{AbstractChar, AbstractString}}, ::Type{FortranString{T}}) where {T} = FortranString{T}
 Base.promote_rule(::Type{FortranString{T}}, ::Type{Union{AbstractChar, AbstractString}}) where {T} = FortranString{T}
 
@@ -40,6 +39,22 @@ Base.iterate(fstr::FortranString{T}, i::Integer) where {T} =
 Base.setindex!(fstr::FortranString{T}, c, i::Integer) where {T} = setindex!(fstr.data, T(c), i)
 Base.getindex(fstr::FortranString{T}, i::Integer) where {T} = fstr.data[i]
 
+Base.ndims(::FortranString{T}) where {T} = 1
+Base.ndims(::Type{FortranString{T}}) where {T} = 1
+Base.size(fstr::FortranString{T}) where {T} = (length(fstr),)
+#function Base.copyto!(fstr::FortranString{T}, src::AbstractString) where {T}
+#    for (k,v) in Iterators.Enumerate(src)
+#        fstr.data[k] = T(v)
+#    end
+#    return fstr
+#end
+#function Base.copyto!(fstr::FortranString{T}, src) where {T}
+#    for i = 1:length(src)
+#        fstr.data[i] = T(src[i])
+#    end
+#    return fstr
+#end
+
 function Base.show(io::IO, fstr::FortranString{T}) where {T}
     if T === Char
         print(io, 'F')
@@ -51,8 +66,12 @@ function Base.show(io::IO, fstr::FortranString{T}) where {T}
     show(io, string(fstr))
     return
 end
-Base.print(io::IO, s::FortranString) = print(io, string(s))
-Base.textwidth(s::FortranString) = textwidth(string(s))
+Base.print(io::IO, fstr::FortranString) = print(io, string(fstr))
+Base.textwidth(fstr::FortranString) = textwidth(string(fstr))
+
+#Base.strip(fstr::AbstractString) = lstrip(rstrip(fstr))
+#Base.lstrip(fstr::FortranString{T}) where {T} = lstrip(c->isspace(Char(c)), fstr)
+#Base.rstrip(fstr::FortranString{T}) where {T} = rstrip(c->isspace(Char(c)), fstr)
 
 """
 String macro for FORTRAN strings based on `Char`
