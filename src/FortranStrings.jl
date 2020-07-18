@@ -1,13 +1,17 @@
 module FortranStrings
 
-export FortranString, @F_str, @F8_str
+export FortranString, @F_str, @F8_str, fit
+
+import Base.Broadcast:
+BroadcastStyle, AbstractArrayStyle, Broadcasted, DefaultArrayStyle, materialize!
 
 """
     FortranString{CharType}
 Datatype for FORTRAN `CHARACTER*N` strings emulation.
 The type parameter `CharType` specifies the type of elements in string.
 """
-mutable struct FortranString{CharType} <: AbstractString
+#mutable struct FortranString{CharType} <: AbstractString
+mutable struct FortranString{CharType} <: AbstractVector{CharType}
     data :: Array{CharType, 1}
 end
 
@@ -32,28 +36,86 @@ Base.length(fstr::FortranString{T}) where {T} = length(fstr.data)
 Base.ncodeunits(fstr::FortranString{T}) where {T} = length(fstr)
 Base.isvalid(fstr::FortranString{T}, i::Integer) where {T} = 1 <= i <= length(fstr)
 
-Base.iterate(fstr::FortranString{T}) where {T} = length(fstr) > 0 ? (fstr.data[1], 1) : nothing
-Base.iterate(fstr::FortranString{T}, i::Integer) where {T} =
-    i < length(fstr) ? (fstr.data[i+1], i+1) : nothing
+Base.iterate(fstr::FortranString{T}) where {T} = iterate(fstr.data)
+Base.iterate(fstr::FortranString{T}, state::Integer) where {T} = iterate(fstr.data, state)
+#Base.iterate(fstr::FortranString{T}) where {T} = length(fstr) > 0 ? (fstr.data[1], 1) : nothing
+#Base.iterate(fstr::FortranString{T}, i::Integer) where {T} =
+#    i < length(fstr) ? (fstr.data[i+1], i+1) : nothing
 
 Base.setindex!(fstr::FortranString{T}, c, i::Integer) where {T} = setindex!(fstr.data, T(c), i)
 Base.getindex(fstr::FortranString{T}, i::Integer) where {T} = fstr.data[i]
 
 Base.ndims(::FortranString{T}) where {T} = 1
 Base.ndims(::Type{FortranString{T}}) where {T} = 1
-Base.size(fstr::FortranString{T}) where {T} = (length(fstr),)
-#function Base.copyto!(fstr::FortranString{T}, src::AbstractString) where {T}
-#    for (k,v) in Iterators.Enumerate(src)
-#        fstr.data[k] = T(v)
+Base.size(fstr::FortranString{T}) where {T} = size(fstr.data)
+Base.axes(fstr::FortranString{T}) where {T} = axes(fstr.data)
+Base.eltype(fstr::FortranString{T}) where {T} = T
+
+struct FortranStringStyle{N} <: AbstractArrayStyle{N} end
+BroadcastStyle(::Type{FortranString{T}}) where {T} = FortranStringStyle{1}()
+# Precedence rules
+#BroadcastStyle(::FortranStringStyle{M}, ::DefaultArrayStyle{N}) where {M,N} =
+#    DefaultArrayStyle(Val(max(M, N)))
+#BroadcastStyle(::FortranStringStyle{M}, ::DefaultArrayStyle{0}) where {M} =
+#    FortranStringStyle{M}()
+##BroadcastStyle(::FortranStringStyle{M}, ::DefaultArrayStyle{N}) where {M,N} =
+##    FortranStringStyle{M}()
+
+
+#Base.BroadcastStyle(::Type{FortranString{T}}) where {T} = DefaultArrayStyle{1}()
+#Base.broadcastable(fstr::FortranString) = fstr
+
+#Base.SubString(fstr::FortranString, i::Int, j::Int) = SubString(string(fstr), i, j)
+
+
+#function Base.copyto!(dest::FortranString{T}, B::Broadcasted{<:DefaultArrayStyle}) where {T}
+#    @show dest, B
+#    for i = 1:length(B)
+#        @show dest.data[i], B[i]
+#        #dest.data[i] = B[i]
+#        #dest.data[i] = T(Char(B[i]))
 #    end
-#    return fstr
+#    return dest
 #end
-#function Base.copyto!(fstr::FortranString{T}, src) where {T}
-#    for i = 1:length(src)
-#        fstr.data[i] = T(src[i])
-#    end
-#    return fstr
+
+#function Base.copyto!(dest::AbstractArray, bc::Broadcasted{<:FortranStringStyle, <:Any, typeof(identity)})
+#    (A,) = bc.args
+#    dest ≡ A && return dest
+#    blockbanded_copyto!(dest, A)
 #end
+function Base.copyto!(dest::FortranString{T}, bc::Broadcasted{<:FortranStringStyle, <:Any, typeof(identity)}) where {T}
+#function Base.copyto!(dest::AbstractArray, bc::Broadcasted{<:FortranStringStyle, <:Any, typeof(identity)})
+    @show "my Base.copyto!"
+    lendest = length(dest)
+    lensrc = length(src)
+    for (i,v) = enumerate(src)
+        dest.data[i] = T(v)
+        i == lendest && break
+    end
+    for i = lensrc+1:lendest
+        dest.data[i] = T(0)
+    end
+    return dest
+    #(A,) = bc.args
+    #dest ≡ A && return dest
+    #blockbanded_copyto!(dest, A)
+end
+
+
+function Base.copyto!(dest::FortranString{T}, src::Broadcasted{<:FortranStringStyle}) where {T}
+#function Base.copyto!(dest::FortranString{T}, src::Broadcasted{<:FortranStringStyle{1}}) where {T}
+    @show "my Base.copyto!"
+    lendest = length(dest)
+    lensrc = length(src)
+    for (i,v) = enumerate(src)
+        dest.data[i] = T(v)
+        i == lendest && break
+    end
+    for i = lensrc+1:lendest
+        dest.data[i] = T(0)
+    end
+    return dest
+end
 
 function Base.show(io::IO, fstr::FortranString{T}) where {T}
     if T === Char
@@ -68,6 +130,20 @@ function Base.show(io::IO, fstr::FortranString{T}) where {T}
 end
 Base.print(io::IO, fstr::FortranString) = print(io, string(fstr))
 Base.textwidth(fstr::FortranString) = textwidth(string(fstr))
+
+"""
+    fit(dest::FortranString{T}, src::FortranString{T})
+Returns elements of `src` within the dimension of `dest`, fill remaining elements with zeros.
+"""
+function fit(dest::FortranString{T}, src::FortranString{T}) where {T}
+    if length(dest) == length(src)
+        return copy(src)
+    elseif length(dest) > length(src)
+        return FortranString{T}(vcat(src.data, zeros(T, length(dest)-length(src))))
+    else
+        return FortranString{T}(src.data[eachindex(dest.data)])
+    end
+end
 
 #Base.strip(fstr::AbstractString) = lstrip(rstrip(fstr))
 #Base.lstrip(fstr::FortranString{T}) where {T} = lstrip(c->isspace(Char(c)), fstr)
