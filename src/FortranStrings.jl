@@ -1,75 +1,78 @@
 module FortranStrings
 
-export FortranString, REPEAT, LEN, LEN_TRIM, TRIM, LNBLNK, LSAME, @F_str, @F8_str
+export FortranString, REPEAT, LEN, LEN_TRIM, TRIM, LNBLNK, LSAME, INDEX, SCAN, @F_str, @F8_str
 
-import Base.Broadcast:
-AbstractArrayStyle, DefaultArrayStyle, Broadcasted
+import Base.Broadcast: AbstractArrayStyle, DefaultArrayStyle, Broadcasted
+
+
+abstract type AbstractFortranString{CharType} <: AbstractVector{CharType} end
 
 """
     FortranString{CharType}
+
 Datatype for FORTRAN `CHARACTER*N` strings emulation.
-The type parameter `CharType` specifies the type of elements in the string.
+
+`CharType` specifies the type of elements in the created string.
 """
-struct FortranString{CharType} <: AbstractVector{CharType}
+struct FortranString{CharType} <: AbstractFortranString{CharType}
     data :: Array{CharType, 1}
 end
 
 const ForStr = FortranString
 
-(::Type{FortranString{T}})(str::AbstractString) where {T} = FortranString{T}(map(T, collect(str)))
-(::Type{FortranString{T}})(ch::AbstractChar) where {T} = FortranString{T}([T(ch)])
-(::Type{FortranString{T}})(::UndefInitializer, n) where {T} = FortranString{T}(Array{T}(undef, n))
+(::Type{ForStr{T}})(s::AbstractString) where {T} = ForStr{T}(map(T, collect(s)))
+(::Type{ForStr{T}})(ch::AbstractChar) where {T} = ForStr{T}([T(ch)])
+(::Type{ForStr{T}})(::UndefInitializer, n) where {T} = ForStr{T}(Array{T}(undef, n))
 
-Base.convert(::Type{FortranString{T}}, str::AbstractString) where {T} = FortranString{T}(str)
-Base.convert(::Type{String}, fstr::FortranString{T}) where {T} = join(map(Char, fstr.data))
+Base.convert(A::Type{AbstractFortranString}, s::AbstractString) = A(s)
+Base.convert(::Type{String}, fs::AbstractFortranString) = join(map(Char, fs))
 
-Base.promote_rule(::Type{Union{AbstractChar, AbstractString}}, ::Type{FortranString{T}}) where {T} = FortranString{T}
-Base.promote_rule(::Type{FortranString{T}}, ::Type{Union{AbstractChar, AbstractString}}) where {T} = FortranString{T}
+Base.promote_rule(::Type{Union{AbstractChar, AbstractString}}, B::Type{AbstractFortranString}) = B
+Base.promote_rule(A::Type{AbstractFortranString}, ::Type{Union{AbstractChar, AbstractString}}) = A
 
-Base.string(fstr::FortranString{T}) where {T} = convert(String, fstr)
+Base.string(fs::ForStr{T}) where {T} = convert(String, fs)
 
-Base.:*(fstr1::FortranString{T1}, fstr2::FortranString{T2}) where {T1} where {T2}=
-    FortranString{T1}(vcat(fstr1.data, map(T1, fstr2.data)))
-Base.:*(str::Union{AbstractChar, AbstractString}, fstr::FortranString{T}) where {T} =
-    FortranString{T}(vcat(FortranString{T}(str).data, fstr.data))
-Base.:*(fstr::FortranString{T}, str::Union{AbstractChar, AbstractString}) where {T} =
-    FortranString{T}(vcat(fstr.data, FortranString{T}(str).data))
+Base.:*(fs1::ForStr{T1}, fs2::ForStr{T2}) where {T1} where {T2}=
+    ForStr{T1}(vcat(fs1.data, map(T1, fs2.data)))
+Base.:*(s::Union{AbstractChar, AbstractString}, fs::ForStr{T}) where {T} =
+    ForStr{T}(vcat(ForStr{T}(s).data, fs.data))
+Base.:*(fs::ForStr{T}, s::Union{AbstractChar, AbstractString}) where {T} =
+    ForStr{T}(vcat(fs.data, ForStr{T}(s).data))
 
-#"""
-#    `str1 // str2`
-#Concatenate strings in FORTRAN, alias for `*`
-#"""
-#Base.://(fstr1::FortranString{T1}, fstr2::FortranString{T2}) where {T1} where {T2} = fstr1 * fstr2
-#Base.://(str::Union{AbstractChar, AbstractString}, fstr::FortranString{T}) where {T} = str * fstr
-#Base.://(fstr::FortranString{T}, str::Union{AbstractChar, AbstractString}) where {T} = fstr * str
-## is it type piracy?
-#Base.://(str1::Union{AbstractChar, AbstractString}, str2::Union{AbstractChar, AbstractString}) = str1 * str2
+Base.:(==)(A::Union{AbstractChar, AbstractString}, B::ForStr) = string(A) == string(B)
+Base.:(==)(A::ForStr, B::Union{AbstractChar, AbstractString}) = string(A) == string(B)
+Base.:(==)(A::AbstractVector, B::ForStr) = string(ForStr{Char}(A)) == string(B)
+Base.:(==)(A::ForStr, B::AbstractVector) = string(A) == string(ForStr{Char}(B))
+Base.:(==)(A::ForStr, B::ForStr) = string(A) == string(B)
 
-@inline Base.length(fstr::FortranString{T}) where {T} = length(fstr.data)
-@inline Base.ncodeunits(fstr::FortranString{T}) where {T} = length(fstr)
-@inline Base.isvalid(fstr::FortranString{T}, i::Integer) where {T} = 1 <= i <= length(fstr)
+@inline Base.length(fs::ForStr{T}) where {T} = length(fs.data)
+@inline Base.ncodeunits(fs::ForStr{T}) where {T} = length(fs)
+@inline Base.isvalid(fs::ForStr{T}, i::Integer) where {T} = 1 <= i <= length(fs)
 
-@inline Base.iterate(fstr::FortranString{T}) where {T} = iterate(fstr.data)
-@inline Base.iterate(fstr::FortranString{T}, state::Integer) where {T} = iterate(fstr.data, state)
+@inline Base.iterate(fs::ForStr{T}) where {T} = iterate(fs.data)
+@inline Base.iterate(fs::ForStr{T}, state::Integer) where {T} = iterate(fs.data, state)
 
-@inline Base.setindex!(fstr::FortranString{T}, c, i::Integer) where {T} = setindex!(fstr.data, T(c), i)
-@inline Base.getindex(fstr::FortranString{T}, i::Integer) where {T} = fstr.data[i]
-@inline Base.getindex(fstr::FortranString{T}, r::AbstractRange{K}) where {T, K} = FortranString{T}(fstr.data[r])
+@inline Base.setindex!(fs::ForStr{T}, c, i::Integer) where {T} = setindex!(fs.data, T(c), i)
+@inline Base.getindex(fs::ForStr{T}, i::Integer) where {T} = Char(fs.data[i])
+@inline Base.getindex(fs::ForStr{T}, r::AbstractRange{K}) where {T, K} = ForStr{T}(fs.data[r])
 
-@inline Base.ndims(::FortranString{T}) where {T} = 1
-@inline Base.ndims(::Type{FortranString{T}}) where {T} = 1
-@inline Base.size(fstr::FortranString{T}) where {T} = size(fstr.data)
-@inline Base.axes(fstr::FortranString{T}) where {T} = axes(fstr.data)
-@inline Base.eltype(fstr::FortranString{T}) where {T} = T
-Base.similar(fstr::FortranString{T}) where {T} = FortranString{T}(undef, length(fstr))
+@inline Base.ndims(::ForStr{T}) where {T} = 1
+@inline Base.ndims(::Type{ForStr{T}}) where {T} = 1
+@inline Base.size(fs::ForStr{T}) where {T} = size(fs.data)
+@inline Base.axes(fs::ForStr{T}) where {T} = axes(fs.data)
+@inline Base.eltype(fs::ForStr{T}) where {T} = T
+Base.similar(fs::ForStr{T}) where {T} = ForStr{T}(undef, length(fs))
 
 struct FortranStringStyle <: AbstractArrayStyle{1} end
-Base.Broadcast.BroadcastStyle(::Type{FortranString{T}}) where {T} = FortranStringStyle()
-#Base.Broadcast.BroadcastStyle(::FortranStringStyle, ::DefaultArrayStyle{1}) = FortranStringStyle()
-Base.Broadcast.BroadcastStyle(::DefaultArrayStyle{1}, ::FortranStringStyle) = FortranStringStyle()
-Base.Broadcast.BroadcastStyle(::FortranStringStyle, ::FortranStringStyle) = FortranStringStyle()
 
-function Base.Broadcast.instantiate(bc::Broadcasted{FortranStringStyle})
+const ForStrStyle = FortranStringStyle
+
+ForStrStyle(::Val{0}) = ForStrStyle()
+ForStrStyle(::Val{1}) = ForStrStyle()
+ForStrStyle(::Val{N}) where N = DefaultArrayStyle{N}()
+Base.Broadcast.BroadcastStyle(::Type{<:ForStr{T}}) where {T} = ForStrStyle()
+
+function Base.Broadcast.instantiate(bc::Broadcasted{ForStrStyle})
     if bc.axes isa Nothing
         axes = Broadcast.combine_axes(bc.args...)
     else
@@ -77,36 +80,100 @@ function Base.Broadcast.instantiate(bc::Broadcasted{FortranStringStyle})
         # FortranString is flexible in any direction thus any sizes are allowed
         #check_broadcast_axes(axes, bc.args...)
     end
-    return Broadcasted{FortranStringStyle}(bc.f, bc.args, axes)
+    return Broadcasted{ForStrStyle}(bc.f, bc.args, axes)
 end
-Base.similar(::Broadcasted{FortranStringStyle}, ::Type{ElType}, dims) where {ElType} =
-    similar(FortranString{ElType}, dims)
-Base.similar(::Broadcasted{FortranStringStyle}, ::Type{Bool}, dims) =
-    similar(BitArray, dims)
+Base.similar(::Broadcasted{ForStrStyle}, ::Type{ElType}, dims) where {ElType} = similar(ForStr{ElType}, dims)
+Base.similar(::Broadcasted{ForStrStyle}, ::Type{Bool}, dims) = similar(BitArray, dims)
 
 
-#function Base.copyto!(dest::FortranString{T}, bc::Broadcasted{FortranStringStyle, <:Any, typeof(identity)}) where {T}
-#function Base.copyto!(dest::Union{AbstractVector{T},FortranString{T}}, bc::Broadcasted{FortranStringStyle}) where {T}
-function Base.copyto!(dest::AbstractVector{T}, bc::Broadcasted{FortranStringStyle}) where {T}
-    @debug dest, bc
-    (lendest = length(dest)) == 0 && return dest
-    (src,) = bc.args
-    lensrc = length(src)
-    for (i,v) = enumerate(src)
-        dest[i] = T(v)
-        i == lendest && break
-    end
-    for i = lensrc+1:lendest
-        dest[i] = T(' ')
-    end
-    return dest
+# TODO: there is an copy created
+function Base.copyto!(dest::AbstractVector{T}, bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{Broadcasted,Broadcasted}}) where {T}
+    @debug 1.0, dest, axes(dest), bc
+    #return fortranstringbroadcast!(bc.f, dest, copyto!(dest, bc.args[1]), copyto!(dest, bc.args[2]))
+    return fortranstringbroadcast!(bc.f, dest, copyto!(dest, bc.args[1]), copy(bc.args[2]))
+    #return fortranstringbroadcast!(bc.f, dest, copy(bc.args[1]), copy(bc.args[2]))
+end
+function Base.copyto!(dest::AbstractVector{T}, bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{Broadcasted,<:Any}}) where {T}
+    @debug 1.1, dest, axes(dest), bc
+    #@debug 1.1, typeof(dest), axes(dest), bc
+    return fortranstringbroadcast!(bc.f, dest, copyto!(dest, bc.args[1]), bc.args[2])
+end
+function Base.copyto!(dest::AbstractVector{T}, bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:Any,Broadcasted}}) where {T}
+    @debug 1.2, typeof(dest), axes(dest), bc
+    return fortranstringbroadcast!(bc.f, dest, bc.args[1], copyto!(dest, bc.args[2]))
+end
+function Base.copyto!(dest::AbstractVector{T}, bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:Any,<:Any}}) where {T}
+    @debug 1.3, dest, axes(dest), bc
+    #@debug 1.3, typeof(dest), axes(dest), bc
+    return fortranstringbroadcast!(bc.f, dest, bc.args[1], bc.args[2])
 end
 
-function Base.show(io::IO, ::MIME"text/plain", fstr::FortranString{T}) where {T}
-    show(io, fstr)
+function Base.copyto!(dest::AbstractVector{T}, bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{Broadcasted}}) where {T}
+    @debug 2, typeof(dest), axes(dest), bc
+    return fortranstringcopyto!(bc.f, dest, copy(first(bc.args)))
+end
+
+function Base.copyto!(dest::AbstractVector{T}, bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:Any}}) where {T}
+    @debug 3, typeof(dest), axes(dest), bc
+    return fortranstringcopyto!(bc.f, dest, bc.args[1])
+end
+
+# special case for `String` because it has `DefaultArrayStyle{0}`
+function Base.copyto!(dest::Union{SubArray{T,N,P},ForStr{T}}, bc::Broadcasted{DefaultArrayStyle{0}}) where {T,N,P<:ForStr}
+    @debug 4, dest, bc.f, bc.args, bc.axes
+    return fortranstringcopyto!(bc.f, dest, bc.args[1][])
+end
+
+
+for (T1,o1) in [(Any, :identity), (Ref{<:AbstractString}, :getindex)]
+    for (T2,o2) in [(Any, :identity), (Ref{<:AbstractString}, :getindex)]
+        @eval begin
+            function fortranstringbroadcast!(op::Union{typeof(<),typeof(<=),typeof(==),typeof(>=),typeof(>),typeof(!=)}, dest, src1::$T1, src2::$T2)
+                @debug "fortranstringbroadcast():", dest, op, src1, src2
+                i = firstindex(dest) - 1
+                for (v1,v2) = zip($o1(src1), $o2(src2))
+                    dest[i+=1] = op(Char(v1), Char(v2))
+                end
+                return dest
+            end
+            function fortranstringbroadcast!(op, dest, src1::$T1, src2::$T2)
+                @debug "fortranstringbroadcast():", dest, op, src1, src2
+                i = firstindex(dest) - 1
+                for (v1,v2) = zip($o1(src1), $o2(src2))
+                    dest[i+=1] = op(v1, v2)
+                end
+                return dest
+            end
+        end
+    end
+end
+
+
+for (T1,o1) in [(Any, :identity), (Ref{<:AbstractString}, :getindex)]
+    @eval function fortranstringcopyto!(op, dest, src::$T1)
+        (lendest = length(dest)) == 0 && return dest
+        T = eltype(dest)
+        i = firstindex(dest)
+        lastind = lastindex(dest)
+        for v in $o1(src)
+            i <= lastind || break
+            dest[i] = T(op(Char(v)))
+            i += 1
+        end
+        while i <= lastind
+            dest[i] = T(' ')
+            i += 1
+        end
+        return dest
+    end
+end
+
+
+function Base.show(io::IO, ::MIME"text/plain", fs::FortranString{T}) where {T}
+    show(io, fs)
     return
 end
-function Base.show(io::IO, fstr::FortranString{T}) where {T}
+function Base.show(io::IO, fs::FortranString{T}) where {T}
     if T === Char
         print(io, 'F')
     elseif T === UInt8
@@ -114,78 +181,118 @@ function Base.show(io::IO, fstr::FortranString{T}) where {T}
     else
         print(io, 'F', T)
     end
-    show(io, string(fstr))
+    show(io, string(fs))
     return
 end
-Base.print(io::IO, fstr::FortranString) = print(io, string(fstr))
-Base.textwidth(fstr::FortranString) = textwidth(string(fstr))
+Base.print(io::IO, fs::FortranString) = print(io, string(fs))
+Base.textwidth(fs::FortranString) = textwidth(string(fs))
 
-Base.strip(fstr::FortranString{T}) where {T} = lstrip(rstrip(fstr))
+Base.strip(fs::FortranString) = lstrip(rstrip(fs))
 
-Base.lstrip(fstr::FortranString{T}) where {T} =
-    FortranString{T}(fstr.data[findfirst(c->!isspace(Char(c))&&!iszero(c), fstr):end])
+Base.lstrip(fs::FortranString{T}) where {T} =
+    FortranString{T}(fs.data[something(findfirst(c->!isspace(Char(c)), fs),end+1):end])
 
-Base.rstrip(fstr::FortranString{T}) where {T} =
-    FortranString{T}(fstr.data[1:findlast(c->!isspace(Char(c))&&!iszero(c), fstr)])
+Base.rstrip(fs::FortranString{T}) where {T} =
+    FortranString{T}(fs.data[1:something(findlast(c->!isspace(Char(c)), fs),0)])
 
-function Base.repeat(fstr::FortranString{T}, n::Integer) where {T}
-    l = length(fstr)
-    r = FortranString{T}(undef, n*l)
+function Base.repeat(fs::AbstractFortranString{T}, n::Integer) where {T}
+    l = length(fs)
+    r = typeof(fs)(undef, n*l)
     for i = 0:n-1
-        r[1+i*l:l+i*l] .= fstr
+        r[1 + i*l:l + i*l] .= fs
     end
     return r
 end
-REPEAT(str::Union{AbstractChar,AbstractString,FortranString}, n::Integer) = repeat(str, n)
+REPEAT(s::Union{AbstractChar,AbstractString,AbstractFortranString}, n::Integer) = repeat(s, n)
 
 """
-    LEN(s::FortranString{T})
+    LEN(STRING)
 
 FORTRAN compatible name alias for `length()`.
 """
-LEN(fstr::FortranString{T}) where {T} = length(fstr)
-LEN(str::AbstractString) = length(str)
+LEN(s::Union{AbstractChar,AbstractString,AbstractFortranString}) = length(s)
 
 """
-    LEN_TRIM(s::FortranString{T})
+    LEN_TRIM(STRING)
 
-Returns the length of the `FortranString{T}` `s` with trailing spaces ignored.
+Return the length of the `STRING` with trailing spaces ignored.
 """
-LEN_TRIM(fstr::FortranString{T}) where {T} = findlast(c->!isspace(Char(c))&&!iszero(c), fstr)
-LEN_TRIM(str::AbstractString) = findlast(c->!isspace(Char(c))&&!iszero(c), str)
-LNBLNK(fstr::FortranString{T}) where {T} = LEN_TRIM(fstr)
-LNBLNK(fstr::AbstractString) = LEN_TRIM(str)
+LEN_TRIM(s::Union{AbstractChar,AbstractString,AbstractFortranString}) =
+    something( findlast(c->!isspace(Char(c)), string(s)), 0 )
 
 """
-    TRIM(s::FortranString{T})
+    LNBLNK(STRING)
 
-Returns a truncated copy of the `FortranString{T}` `s` where all trailing
+Alias for LEN_TRIM.
+"""
+LNBLNK(s::Union{AbstractString,AbstractFortranString}) = LEN_TRIM(s)
+
+"""
+    TRIM(STRING)
+
+Return a truncated copy of the `STRING` where all trailing
 spaces are removed.
 """
-TRIM(fstr::FortranString{T}) where {T} = rstrip(fstr)
-TRIM(str::AbstractString) = rstrip(str)
+TRIM(s::Union{AbstractString,AbstractFortranString}) = rstrip(s)
 
 """
     LSAME(s1, s2)
 
-Standard BLAS function to compare first character of the strings.
-Returns `bool`.
+Standard BLAS function to compare first character of two strings,
+returns `bool`.
 """
 LSAME(s1, s2) = uppercase(Char(first(s1))) == uppercase(Char(first(s2)))
 
 """
+    INDEX(STRING, SUBSTRING, BACK=false)
+
+Return the position of the start of the first occurrence of string `SUBSTRING`
+as a substring in `STRING`, counting from one.
+
+If `SUBSTRING` is not present in `STRING`, zero is returned.
+If the `BACK` argument is present and true, the return value is the start of
+the last occurrence rather than the first.
+"""
+INDEX(s::Union{AbstractString,AbstractFortranString}, substr, back=false) =
+    first(something( back ? findlast(string(substr), string(s)) : findfirst(string(substr), string(s)), 0 ))
+
+"""
+    SCAN(STRING, CHARSET, BACK=false)
+
+Return the position of the start of the first occurrence of string `CHARSET`
+as a `CHARSET` in `STRING`, counting from one.
+
+If `CHARSET` is not present in `STRING`, zero is returned. If the `BACK` argumentis present and true, the return value is the start of the last occurrence rather than the first.
+"""
+function SCAN(s::Union{AbstractString,AbstractFortranString}, charset, back=false)
+    if back
+        i = 0
+        for c in charset
+            i = max( something(findlast(Char(c), string(s)), i), i)
+        end
+        return i
+    else
+        i = length(s) + 1
+        for c in charset
+            i = min( something(findfirst(Char(c), string(s)), i), i)
+        end
+        return i > length(s) ? 0 : i
+    end
+end
+
+"""
     F"some Char string"
 
-String macro for FORTRAN strings based on `Char`
+String macro for `FortranString{Char}`.
 """
-macro F_str(str) ; FortranString{Char}(str) ; end
+macro F_str(s) ; FortranString{Char}(s) ; end
 
 """
     F8"some UInt8 string"
 
-String macro for FORTRAN compatible strings based on `UInt8`
+String macro for compatible with FORTRAN strings `FortranString{UInt8}`.
 """
-macro F8_str(str) ; FortranString{UInt8}(str) ; end
+macro F8_str(s) ; FortranString{UInt8}(s) ; end
 
 
 end # of module FortranStrings
