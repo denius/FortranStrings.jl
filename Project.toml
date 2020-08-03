@@ -2,3 +2,6 @@ name = "FortranStrings"
 uuid = "7be52c5c-42b8-4a4a-8481-ef11d8f176f1"
 authors = ["Denis Telnov <denis.telnov@gmail.com>"]
 version = "0.1.0"
+
+[deps]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
