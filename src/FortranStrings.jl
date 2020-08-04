@@ -15,7 +15,7 @@ Datatype for FORTRAN `CHARACTER*N` strings emulation.
 `CharType` specifies the type of elements in the created string.
 """
 struct FortranString{CharType} <: AbstractFortranString{CharType}
-    data :: Array{CharType, 1}
+    data :: Vector{CharType}
 end
 
 const ForStr = FortranString
@@ -30,7 +30,7 @@ Base.convert(::Type{String}, fs::AbstractFortranString) = join(map(Char, fs))
 Base.promote_rule(::Type{Union{AbstractChar, AbstractString}}, B::Type{AbstractFortranString}) = B
 Base.promote_rule(A::Type{AbstractFortranString}, ::Type{Union{AbstractChar, AbstractString}}) = A
 
-Base.string(fs::ForStr{T}) where {T} = convert(String, fs)
+Base.string(fs::ForStr) = convert(String, fs)
 
 Base.:*(fs1::ForStr{T1}, fs2::ForStr{T2}) where {T1} where {T2}=
     ForStr{T1}(vcat(fs1.data, map(T1, fs2.data)))
@@ -45,23 +45,43 @@ Base.:(==)(A::AbstractVector, B::ForStr) = string(ForStr{Char}(A)) == string(B)
 Base.:(==)(A::ForStr, B::AbstractVector) = string(A) == string(ForStr{Char}(B))
 Base.:(==)(A::ForStr, B::ForStr) = string(A) == string(B)
 
-@inline Base.length(fs::ForStr{T}) where {T} = length(fs.data)
-@inline Base.ncodeunits(fs::ForStr{T}) where {T} = length(fs)
-@inline Base.isvalid(fs::ForStr{T}, i::Integer) where {T} = 1 <= i <= length(fs)
+@inline Base.length(fs::ForStr) = length(fs.data)
+@inline Base.ncodeunits(fs::ForStr) = length(fs)
+@inline Base.isvalid(fs::ForStr, i::Integer) = 1 <= i <= length(fs)
 
-@inline Base.iterate(fs::ForStr{T}) where {T} = iterate(fs.data)
-@inline Base.iterate(fs::ForStr{T}, state::Integer) where {T} = iterate(fs.data, state)
+@inline Base.iterate(fs::ForStr) = iterate(fs.data)
+@inline Base.iterate(fs::ForStr, state::Integer) = iterate(fs.data, state)
 
 @inline Base.setindex!(fs::ForStr{T}, c, i::Integer) where {T} = setindex!(fs.data, T(c), i)
 @inline Base.getindex(fs::ForStr{T}, i::Integer) where {T} = Char(fs.data[i])
 @inline Base.getindex(fs::ForStr{T}, r::AbstractRange{K}) where {T, K} = ForStr{T}(fs.data[r])
 
-@inline Base.ndims(::ForStr{T}) where {T} = 1
-@inline Base.ndims(::Type{ForStr{T}}) where {T} = 1
-@inline Base.size(fs::ForStr{T}) where {T} = size(fs.data)
-@inline Base.axes(fs::ForStr{T}) where {T} = axes(fs.data)
+@inline Base.ndims(::ForStr) = 1
+@inline Base.ndims(::Type{ForStr}) = 1
+@inline Base.size(fs::ForStr) = size(fs.data)
+@inline Base.axes(fs::ForStr) = axes(fs.data)
 @inline Base.eltype(fs::ForStr{T}) where {T} = T
 Base.similar(fs::ForStr{T}) where {T} = ForStr{T}(undef, length(fs))
+
+function Base.show(io::IO, ::MIME"text/plain", fs::FortranString)
+    show(io, fs)
+    return
+end
+function Base.show(io::IO, fs::FortranString{T}) where {T}
+    if T === Char
+        print(io, 'F')
+    elseif T === UInt8
+        print(io, 'F', '8')
+    else
+        print(io, 'F', T)
+    end
+    show(io, string(fs))
+    return
+end
+Base.print(io::IO, fs::FortranString) = print(io, string(fs))
+Base.textwidth(fs::FortranString) = textwidth(string(fs))
+
+# Broadcasting
 
 struct FortranStringStyle <: AbstractArrayStyle{1} end
 
@@ -70,7 +90,7 @@ const ForStrStyle = FortranStringStyle
 ForStrStyle(::Val{0}) = ForStrStyle()
 ForStrStyle(::Val{1}) = ForStrStyle()
 ForStrStyle(::Val{N}) where N = DefaultArrayStyle{N}()
-Base.Broadcast.BroadcastStyle(::Type{<:ForStr{T}}) where {T} = ForStrStyle()
+Base.Broadcast.BroadcastStyle(::Type{<:ForStr}) = ForStrStyle()
 
 function Base.Broadcast.instantiate(bc::Broadcasted{ForStrStyle})
     if bc.axes isa Nothing
@@ -86,58 +106,55 @@ Base.similar(::Broadcasted{ForStrStyle}, ::Type{ElType}, dims) where {ElType} = 
 Base.similar(::Broadcasted{ForStrStyle}, ::Type{Bool}, dims) = similar(BitArray, dims)
 
 
-# TODO: there is an copy created
-function Base.copyto!(dest::AbstractVector{T}, bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{Broadcasted,Broadcasted}}) where {T}
-    @debug 1.0, dest, axes(dest), bc
-    #return fortranstringbroadcast!(bc.f, dest, copyto!(dest, bc.args[1]), copyto!(dest, bc.args[2]))
-    return fortranstringbroadcast!(bc.f, dest, copyto!(dest, bc.args[1]), copy(bc.args[2]))
-    #return fortranstringbroadcast!(bc.f, dest, copy(bc.args[1]), copy(bc.args[2]))
-end
-function Base.copyto!(dest::AbstractVector{T}, bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{Broadcasted,<:Any}}) where {T}
-    @debug 1.1, dest, axes(dest), bc
-    #@debug 1.1, typeof(dest), axes(dest), bc
-    return fortranstringbroadcast!(bc.f, dest, copyto!(dest, bc.args[1]), bc.args[2])
-end
-function Base.copyto!(dest::AbstractVector{T}, bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:Any,Broadcasted}}) where {T}
-    @debug 1.2, typeof(dest), axes(dest), bc
-    return fortranstringbroadcast!(bc.f, dest, bc.args[1], copyto!(dest, bc.args[2]))
-end
-function Base.copyto!(dest::AbstractVector{T}, bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:Any,<:Any}}) where {T}
-    @debug 1.3, dest, axes(dest), bc
-    #@debug 1.3, typeof(dest), axes(dest), bc
-    return fortranstringbroadcast!(bc.f, dest, bc.args[1], bc.args[2])
-end
+Base.copyto!(dest::AbstractVector, bc::Broadcasted{ForStrStyle, <:Any, <:Any,
+                                                      <:Tuple{Broadcasted,Broadcasted}}) =
+    # TODO: an unwanted copy is make here
+    fortranstringbroadcast!(bc.f, dest, copyto!(dest, bc.args[1]), copy(bc.args[2]))
 
-function Base.copyto!(dest::AbstractVector{T}, bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{Broadcasted}}) where {T}
-    @debug 2, typeof(dest), axes(dest), bc
-    return fortranstringcopyto!(bc.f, dest, copy(first(bc.args)))
-end
+Base.copyto!(dest::AbstractVector, bc::Broadcasted{ForStrStyle, <:Any, <:Any,
+                                                   <:Tuple{Broadcasted,<:Any}}) =
+    fortranstringbroadcast!(bc.f, dest, copyto!(dest, bc.args[1]), bc.args[2])
 
-function Base.copyto!(dest::AbstractVector{T}, bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:Any}}) where {T}
-    @debug 3, typeof(dest), axes(dest), bc
-    return fortranstringcopyto!(bc.f, dest, bc.args[1])
-end
+Base.copyto!(dest::AbstractVector, bc::Broadcasted{ForStrStyle, <:Any, <:Any,
+                                                   <:Tuple{<:Any,Broadcasted}}) =
+    fortranstringbroadcast!(bc.f, dest, bc.args[1], copyto!(dest, bc.args[2]))
+
+Base.copyto!(dest::AbstractVector, bc::Broadcasted{ForStrStyle, <:Any, <:Any,
+                                                   <:Tuple{<:Any,<:Any}}) =
+    fortranstringbroadcast!(bc.f, dest, bc.args[1], bc.args[2])
+
+Base.copyto!(dest::AbstractVector, bc::Broadcasted{ForStrStyle, <:Any, <:Any,
+                                                   <:Tuple{Broadcasted}}) =
+    fortranstringcopyto!(bc.f, dest, copyto!(dest, first(bc.args)))
+
+Base.copyto!(dest::AbstractVector, bc::Broadcasted{ForStrStyle, <:Any, <:Any,
+                                                   <:Tuple{<:Any}}) =
+    fortranstringcopyto!(bc.f, dest, bc.args[1])
 
 # special case for `String` because it has `DefaultArrayStyle{0}`
-function Base.copyto!(dest::Union{SubArray{T,N,P},ForStr{T}}, bc::Broadcasted{DefaultArrayStyle{0}}) where {T,N,P<:ForStr}
-    @debug 4, dest, bc.f, bc.args, bc.axes
-    return fortranstringcopyto!(bc.f, dest, bc.args[1][])
-end
+Base.copyto!(dest::Union{SubArray{T,N,P},ForStr{T}},
+             bc::Broadcasted{DefaultArrayStyle{0}}) where {T,N,P<:ForStr} =
+    fortranstringcopyto!(bc.f, dest, bc.args[1])
 
 
 for (T1,o1) in [(Any, :identity), (Ref{<:AbstractString}, :getindex)]
     for (T2,o2) in [(Any, :identity), (Ref{<:AbstractString}, :getindex)]
         @eval begin
-            function fortranstringbroadcast!(op::Union{typeof(<),typeof(<=),typeof(==),typeof(>=),typeof(>),typeof(!=)}, dest, src1::$T1, src2::$T2)
-                @debug "fortranstringbroadcast():", dest, op, src1, src2
+            """
+            Apply `op` element-wise on `src1` and `src2` converting to `Char` and
+            store the result in `dest`.
+            """
+            function fortranstringbroadcast!(op::Union{typeof(<),typeof(<=),typeof(==),
+                                                       typeof(>=),typeof(>),typeof(!=)},
+                                             dest, src1::$T1, src2::$T2)
                 i = firstindex(dest) - 1
                 for (v1,v2) = zip($o1(src1), $o2(src2))
                     dest[i+=1] = op(Char(v1), Char(v2))
                 end
                 return dest
             end
+            "Apply `op` element-wise on `src1` and `src2` and store the result in `dest`."
             function fortranstringbroadcast!(op, dest, src1::$T1, src2::$T2)
-                @debug "fortranstringbroadcast():", dest, op, src1, src2
                 i = firstindex(dest) - 1
                 for (v1,v2) = zip($o1(src1), $o2(src2))
                     dest[i+=1] = op(v1, v2)
@@ -148,8 +165,11 @@ for (T1,o1) in [(Any, :identity), (Ref{<:AbstractString}, :getindex)]
     end
 end
 
-
 for (T1,o1) in [(Any, :identity), (Ref{<:AbstractString}, :getindex)]
+    """
+    Apply `op` element-wise on `src` converted to `Char` and set the result into `dest`.
+    The result vector will be stretched or shrinked to satisfy size of `dest`.
+    """
     @eval function fortranstringcopyto!(op, dest, src::$T1)
         (lendest = length(dest)) == 0 && return dest
         T = eltype(dest)
@@ -168,24 +188,7 @@ for (T1,o1) in [(Any, :identity), (Ref{<:AbstractString}, :getindex)]
     end
 end
 
-
-function Base.show(io::IO, ::MIME"text/plain", fs::FortranString{T}) where {T}
-    show(io, fs)
-    return
-end
-function Base.show(io::IO, fs::FortranString{T}) where {T}
-    if T === Char
-        print(io, 'F')
-    elseif T === UInt8
-        print(io, 'F', '8')
-    else
-        print(io, 'F', T)
-    end
-    show(io, string(fs))
-    return
-end
-Base.print(io::IO, fs::FortranString) = print(io, string(fs))
-Base.textwidth(fs::FortranString) = textwidth(string(fs))
+# Some `String` and FORTRAN functions
 
 Base.strip(fs::FortranString) = lstrip(rstrip(fs))
 
@@ -195,7 +198,7 @@ Base.lstrip(fs::FortranString{T}) where {T} =
 Base.rstrip(fs::FortranString{T}) where {T} =
     FortranString{T}(fs.data[1:something(findlast(c->!isspace(Char(c)), fs),0)])
 
-function Base.repeat(fs::AbstractFortranString{T}, n::Integer) where {T}
+function Base.repeat(fs::AbstractFortranString, n::Integer)
     l = length(fs)
     r = typeof(fs)(undef, n*l)
     for i = 0:n-1
@@ -203,6 +206,12 @@ function Base.repeat(fs::AbstractFortranString{T}, n::Integer) where {T}
     end
     return r
 end
+
+"""
+    REPEAT(STRING, N)
+
+Repeat `STRING` `N` times.
+"""
 REPEAT(s::Union{AbstractChar,AbstractString,AbstractFortranString}, n::Integer) = repeat(s, n)
 
 """
@@ -262,7 +271,9 @@ INDEX(s::Union{AbstractString,AbstractFortranString}, substr, back=false) =
 Return the position of the start of the first occurrence of string `CHARSET`
 as a `CHARSET` in `STRING`, counting from one.
 
-If `CHARSET` is not present in `STRING`, zero is returned. If the `BACK` argumentis present and true, the return value is the start of the last occurrence rather than the first.
+If `CHARSET` is not present in `STRING`, zero is returned. If the `BACK` argument
+is present and true, the return value is the start of the last occurrence rather than
+the first.
 """
 function SCAN(s::Union{AbstractString,AbstractFortranString}, charset, back=false)
     if back
