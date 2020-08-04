@@ -104,6 +104,24 @@ end
             @test (r = $S("abc").==$S("abd").==$S("cbd").==$S("cba");  r) == BitVector([0,1,0])
             @test (r = $S("abc").==$S("abd").==$S("cbd").=="cba".==$S("cba");  r) == BitVector([0,1,0])
             $T != Char && @test (r = $S("abc").+$S("ABC").-$S("abc"); (r, typeof(r))) == ($S("ABC"), $S)
+
+            if $T != Char
+                s1 = $S(collect(1+1:6+1))
+                s2 = $S(collect(1+2:6+2))
+                s3 = $S(collect(1+3:6+3))
+                s4 = $S(collect(1+4:6+4))
+                s5 = $S(collect(1+5:6+5))
+                s6 = $S(collect(1+6:6+6))
+                s7 = $S(collect(1+7:6+7))
+                s8 = $S(collect(1+8:6+8))
+                @test (s1.+s2)                         == (s1+s2)
+                @test (s1.+s2.+s3)                     == (s1+s2+s3)
+                @test (s1.+s2.+s3.+s4)                 == (s1+s2+s3+s4)
+                @test (s1.+s2.+s3.+s4.+s5)             == (s1+s2+s3+s4+s5)
+                @test (s1.+s2.+s3.+s4.+s5.+s6)         == (s1+s2+s3+s4+s5+s6)
+                @test (s1.+s2.+s3.+s4.+s5.+s6.+s7)     == (s1+s2+s3+s4+s5+s6+s7)
+                @test (s1.+s2.+s3.+s4.+s5.+s6.+s7.+s8) == (s1+s2+s3+s4+s5+s6+s7+s8)
+            end
         end
 
         for STR in (String, FortranString{Char}, FortranString{UInt8}, FortranString{UInt64})
