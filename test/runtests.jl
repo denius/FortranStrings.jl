@@ -223,15 +223,17 @@ end
                 @test REPEAT(s, 2)         == $S(" abc  abc ")
                 @test isa(REPEAT(s, 2), $S)
 
-                @test INDEX($S("12341234"), $("23"))       == 2
-                @test INDEX($S("12341234"), $("23"), true) == 6
-                @test INDEX($S("12341234"), $("00"))       == 0
-                @test INDEX($S("12341234"), $("00"), true) == 0
+                @test INDEX($S("12341234"), $("23")           ) == 2
+                @test INDEX($S("12341234"), $("23"), true     ) == 6
+                @test INDEX($S("12341234"), $("23"), back=true) == 6
+                @test INDEX($S("12341234"), $("00")           ) == 0
+                @test INDEX($S("12341234"), $("00"), true     ) == 0
 
-                @test SCAN($S("12341234"), $("23"))        == 2
-                @test SCAN($S("12341234"), $("23"), true)  == 7
-                @test SCAN($S("12341234"), $("ab"))        == 0
-                @test SCAN($S("12341234"), $("ab"), true)  == 0
+                @test SCAN($S("12341234"), $("23")            ) == 2
+                @test SCAN($S("12341234"), $("23"), true      ) == 7
+                @test SCAN($S("12341234"), $("23"), back=true ) == 7
+                @test SCAN($S("12341234"), $("ab")            ) == 0
+                @test SCAN($S("12341234"), $("ab"), true      ) == 0
 
             end
         end

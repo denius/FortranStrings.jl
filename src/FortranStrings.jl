@@ -264,6 +264,7 @@ the last occurrence rather than the first.
 """
 INDEX(s::Union{AbstractString,AbstractFortranString}, substr, back=false) =
     first(something( back ? findlast(string(substr), string(s)) : findfirst(string(substr), string(s)), 0 ))
+@inline INDEX(s::Union{AbstractString,AbstractFortranString}, substr; back=false) = INDEX(s, substr, back)
 
 """
     SCAN(STRING, CHARSET, BACK=false)
@@ -290,6 +291,7 @@ function SCAN(s::Union{AbstractString,AbstractFortranString}, charset, back=fals
         return i > length(s) ? 0 : i
     end
 end
+@inline SCAN(s::Union{AbstractString,AbstractFortranString}, charset; back=false) = SCAN(s, charset, back)
 
 """
     F"some Char string"
