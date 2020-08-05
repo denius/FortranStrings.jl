@@ -115,6 +115,7 @@ function Base.Broadcast.instantiate(bc::Broadcasted{ForStrStyle})
     end
     return Broadcasted{ForStrStyle}(bc.f, bc.args, axes)
 end
+Base.similar(bc::Broadcasted{ForStrStyle}, ::Type{ElType}) where {ElType} = similar(bc, ElType, axes(bc))
 Base.similar(::Broadcasted{ForStrStyle}, ::Type{ElType}, dims) where {ElType} = similar(ForStr{ElType}, dims)
 Base.similar(::Broadcasted{ForStrStyle}, ::Type{Bool}, dims) = similar(BitArray, dims)
 
