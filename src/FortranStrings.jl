@@ -10,9 +10,20 @@ abstract type AbstractFortranString{CharType} <: AbstractVector{CharType} end
 """
     FortranString{CharType}
 
-Datatype for FORTRAN `CHARACTER*N` strings emulation.
+Datatype for emulating FORTRAN `CHARACTER*N` strings.
 
-`CharType` specifies the type of elements in the created string.
+This type is a wrapper for a `Vector` with elements of type `CharType`.
+Some functions and broadcasting added for limited strings emulation.
+
+Assignment should be done via broadcasting:
+```jldoctest
+julia> s = F8"abc"; s .= "AB" * F"CD"; s
+F8"ABC"
+
+julia> s = F"abc"; s[2:end] .= "ABC"; s
+F"aAB"
+```
+Element-wise assignment is also supported, but it is not FORTRAN alike.
 """
 struct FortranString{CharType} <: AbstractFortranString{CharType}
     data :: Vector{CharType}
@@ -47,6 +58,8 @@ Base.:(==)(A::ForStr, B::ForStr) = string(A) == string(B)
 
 @inline Base.length(fs::ForStr) = length(fs.data)
 @inline Base.ncodeunits(fs::ForStr) = length(fs)
+@inline Base.codeunit(fs::ForStr{T}) where {T} = T<:Char ? UInt8 : unsigned(T)
+@inline Base.sizeof(fs::ForStr) = sizeof(fs.data)
 @inline Base.isvalid(fs::ForStr, i::Integer) = 1 <= i <= length(fs)
 
 @inline Base.iterate(fs::ForStr) = iterate(fs.data)
@@ -97,7 +110,7 @@ function Base.Broadcast.instantiate(bc::Broadcasted{ForStrStyle})
         axes = Broadcast.combine_axes(bc.args...)
     else
         axes = bc.axes
-        # FortranString is flexible in any direction thus any sizes are allowed
+        # FortranString is flexible in assignment in any direction thus any sizes are allowed
         #check_broadcast_axes(axes, bc.args...)
     end
     return Broadcasted{ForStrStyle}(bc.f, bc.args, axes)
@@ -190,13 +203,13 @@ end
 
 # Some `String` and FORTRAN functions
 
-Base.strip(fs::FortranString) = lstrip(rstrip(fs))
+Base.strip(fs::AbstractFortranString) = lstrip(rstrip(fs))
 
-Base.lstrip(fs::FortranString{T}) where {T} =
-    FortranString{T}(fs.data[something(findfirst(c->!isspace(Char(c)), fs),end+1):end])
+Base.lstrip(fs::AbstractFortranString) =
+    typeof(fs)(fs.data[something(findfirst(c->!isspace(Char(c)), fs),end+1):end])
 
-Base.rstrip(fs::FortranString{T}) where {T} =
-    FortranString{T}(fs.data[1:something(findlast(c->!isspace(Char(c)), fs),0)])
+Base.rstrip(fs::AbstractFortranString) =
+    typeof(fs)(fs.data[1:something(findlast(c->!isspace(Char(c)), fs),0)])
 
 function Base.repeat(fs::AbstractFortranString, n::Integer)
     l = length(fs)
@@ -206,6 +219,21 @@ function Base.repeat(fs::AbstractFortranString, n::Integer)
     end
     return r
 end
+
+Base.occursin(r, fs::AbstractFortranString) = occursin(r, string(fs))
+Base.occursin(r::AbstractFortranString, fs::AbstractFortranString) = occursin(string(r), string(fs))
+Base.occursin(r::AbstractFortranString, fs) = occursin(string(r), fs)
+Base.occursin(r::Regex, fs::AbstractFortranString; offset::Integer=0) = occursin(r, string(fs), offset=offset)
+
+Base.match(r, fs::AbstractFortranString) = match(r, string(fs))
+
+Base.split(fs::AbstractFortranString, splitter::AbstractFortranString; limit::Integer=0, keepempty::Bool=true) =
+    map(typeof(fs), split(string(fs), string(splitter), limit=limit, keepempty=keepempty))
+Base.split(fs::AbstractFortranString, splitter; limit::Integer=0, keepempty::Bool=true) =
+    map(typeof(fs), split(string(fs), splitter, limit=limit, keepempty=keepempty))
+Base.split(fs, splitter::AbstractFortranString; limit::Integer=0, keepempty::Bool=true) =
+    map(typeof(fs), split(fs, string(splitter), limit=limit, keepempty=keepempty))
+
 
 """
     REPEAT(STRING, N)
@@ -262,9 +290,10 @@ If `SUBSTRING` is not present in `STRING`, zero is returned.
 If the `BACK` argument is present and true, the return value is the start of
 the last occurrence rather than the first.
 """
-INDEX(s::Union{AbstractString,AbstractFortranString}, substr, back=false) =
+INDEX(s::Union{AbstractString,AbstractFortranString}, substr, back::Bool) =
     first(something( back ? findlast(string(substr), string(s)) : findfirst(string(substr), string(s)), 0 ))
-@inline INDEX(s::Union{AbstractString,AbstractFortranString}, substr; back=false) = INDEX(s, substr, back)
+@inline INDEX(s::Union{AbstractString,AbstractFortranString}, substr; back::Bool=false) =
+    INDEX(s, substr, back)
 
 """
     SCAN(STRING, CHARSET, BACK=false)
@@ -276,7 +305,7 @@ If `CHARSET` is not present in `STRING`, zero is returned. If the `BACK` argumen
 is present and true, the return value is the start of the last occurrence rather than
 the first.
 """
-function SCAN(s::Union{AbstractString,AbstractFortranString}, charset, back=false)
+function SCAN(s::Union{AbstractString,AbstractFortranString}, charset, back::Bool)
     if back
         i = 0
         for c in charset
@@ -291,7 +320,8 @@ function SCAN(s::Union{AbstractString,AbstractFortranString}, charset, back=fals
         return i > length(s) ? 0 : i
     end
 end
-@inline SCAN(s::Union{AbstractString,AbstractFortranString}, charset; back=false) = SCAN(s, charset, back)
+@inline SCAN(s::Union{AbstractString,AbstractFortranString}, charset; back::Bool=false) =
+    SCAN(s, charset, back)
 
 """
     F"some Char string"

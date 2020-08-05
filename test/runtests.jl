@@ -223,6 +223,14 @@ end
                 @test REPEAT(s, 2)         == $S(" abc  abc ")
                 @test isa(REPEAT(s, 2), $S)
 
+                s = $S(" abc  abc ")
+                $S==String || @test split(s, $S("c"))    == [$S(" ab"), $S("  ab"), $S(" ")]
+                $S==String || @test split(s, r"c")       == [$S(" ab"), $S("  ab"), $S(" ")]
+                @test occursin($S("c"), s) == true
+                @test occursin($S("d"), s) == false
+                @test (m = match(r"(c)", s); length(m.captures)) == 1
+                @test (m = match(r"(d)", s); m===nothing)        == true
+
                 @test INDEX($S("12341234"), $("23")           ) == 2
                 @test INDEX($S("12341234"), $("23"), true     ) == 6
                 @test INDEX($S("12341234"), $("23"), back=true) == 6
