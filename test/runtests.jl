@@ -16,9 +16,9 @@ using FortranStrings, Test
         @test s         == FortranStrings.FortranString{UInt8}(UInt8[0x61, 0x62, 0x63])
         @test string(s) == "abc"
         @test String(s) == "abc"
-        @test s[1]      === 'a'
-        @test s[2]      === 'b'
-        @test s[3]      === 'c'
+        @test s[1:1]    == 'a'
+        @test s[2:2]    == 'b'
+        @test s[3:3]    == 'c'
         @test s.data    == UInt8[0x61, 0x62, 0x63]
 
         io = IOBuffer()
@@ -43,9 +43,9 @@ using FortranStrings, Test
         @test s         == FortranStrings.FortranString{Char}(['a', 'b', 'c'])
         @test string(s) == "abc"
         @test String(s) == "abc"
-        @test s[1]      === 'a'
-        @test s[2]      === 'b'
-        @test s[3]      === 'c'
+        @test s[1:1]    == 'a'
+        @test s[2:2]    == 'b'
+        @test s[3:3]    == 'c'
         @test s.data    == ['a', 'b', 'c']
 
         io = IOBuffer()
@@ -70,9 +70,9 @@ using FortranStrings, Test
         @test s         == FortranStrings.FortranString{UInt64}(UInt64[0x0061, 0x0062, 0x0063])
         @test string(s) == "abc"
         @test_throws MethodError String(s) == "abc" # String(<:AbstractVector{UInt64}) not exist
-        @test s[1]      === 'a'
-        @test s[2]      === 'b'
-        @test s[3]      === 'c'
+        @test s[1:1]    == 'a'
+        @test s[2:2]    == 'b'
+        @test s[3:3]    == 'c'
         @test s.data    == UInt64[0x0061, 0x0062, 0x0063]
 
         io = IOBuffer()
@@ -91,8 +91,6 @@ end
         @eval S = FortranString{$T}
 
         @eval begin
-            # `uppercase()` always returns `Char`, thus it will always be `FortranString{Char}`
-            @test (r = uppercase.($S("abc"))            ; (r, typeof(r))) == (FortranString{Char}("ABC"), FortranString{Char})
             #
             @test (incr(x)=x+0x01 ; r = incr.($S("abc"))               ; (r, typeof(r))) == ($S("bcd"), $S)
             @test (incr(x)=x+0x01 ; r = incr.(incr.($S("abc")))        ; (r, typeof(r))) == ($S("cde"), $S)
@@ -104,6 +102,12 @@ end
             @test (r = $S("abc").==$S("abd").==$S("cbd").==$S("cba");  r) == BitVector([0,1,0])
             @test (r = $S("abc").==$S("abd").==$S("cbd").=="cba".==$S("cba");  r) == BitVector([0,1,0])
             $T != Char && @test (r = $S("abc").+$S("ABC").-$S("abc"); (r, typeof(r))) == ($S("ABC"), $S)
+            @test (r = $S("abc").+$S("ABC").-$S("abc");  r) == $S("ABC")
+            @test (r = $S("abc").+   "ABC" .-$S("abc");  r) == $S("ABC")
+            @test (r = $S("abc").+   "A"   .-$S("abc");  r) == $S("AAA")
+            @test (r = $S("abc").+   'A'   .-$S("abc");  r) == $S("AAA")
+            @test (r = $S("abc").+   0x41  .-$S("abc");  r) == $S("AAA")
+            @test (r = $S("abc").+   65    .-$S("abc");  r) == $S("AAA")
 
             if $T != Char
                 s1 = $S(collect(1+1:6+1))
@@ -222,6 +226,9 @@ end
 
                 @test REPEAT(s, 2)         == $S(" abc  abc ")
                 @test isa(REPEAT(s, 2), $S)
+
+                @test (r = uppercase($S("abc")); (r, typeof(r))) == ($S("ABC"), $S)
+                @test (r = lowercase($S("ABC")); (r, typeof(r))) == ($S("abc"), $S)
 
                 s = $S(" abc  abc ")
                 $S==String || @test split(s, $S("c"))    == [$S(" ab"), $S("  ab"), $S(" ")]
