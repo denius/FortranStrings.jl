@@ -83,6 +83,29 @@ using FortranStrings, Test
         @test String(take!(io)) == "FortranString{UInt64}"
     end
 
+    @testset "Quoting              " begin
+        for T in (Char, UInt8, UInt64)
+            @eval S = FortranString{$T}
+            @eval begin
+                @test       $S("''abc''")             ==                   $S([0x27, 0x61, 0x62, 0x63, 0x27])
+                @test     $S("''''abc''''")           ==             $S([0x27, 0x27, 0x61, 0x62, 0x63, 0x27, 0x27])
+                @test       $S("''abc''", "d")        ==             $S([0x27, 0x27, 0x61, 0x62, 0x63, 0x27, 0x27])
+                @test     $S("''''abc''''", "d")      == $S([0x27, 0x27, 0x27, 0x27, 0x61, 0x62, 0x63, 0x27, 0x27, 0x27, 0x27])
+                @test       $S("''abc''", "qq")       ==             $S([0x27, 0x27, 0x61, 0x62, 0x63, 0x27, 0x27])
+                @test     $S("''''abc''''", "qq")     == $S([0x27, 0x27, 0x27, 0x27, 0x61, 0x62, 0x63, 0x27, 0x27, 0x27, 0x27])
+                @test     $S("\"\"abc\"\"")           ==             $S([0x22, 0x22, 0x61, 0x62, 0x63, 0x22, 0x22])
+                @test $S("\"\"\"\"abc\"\"\"\"")       == $S([0x22, 0x22, 0x22, 0x22, 0x61, 0x62, 0x63, 0x22, 0x22, 0x22, 0x22])
+                @test     $S("\"\"abc\"\"", "d")      ==                   $S([0x22, 0x61, 0x62, 0x63, 0x22])
+                @test $S("\"\"\"\"abc\"\"\"\"", "d")  ==             $S([0x22, 0x22, 0x61, 0x62, 0x63, 0x22, 0x22])
+                @test     $S("\"\"abc\"\"", "qq")     ==                   $S([0x22, 0x61, 0x62, 0x63, 0x22])
+                @test $S("\"\"\"\"abc\"\"\"\"", "qq") ==             $S([0x22, 0x22, 0x61, 0x62, 0x63, 0x22, 0x22])
+
+                @test_throws ArgumentError $S("abc", "q")
+                @test_throws ArgumentError $S("abc", "dd")
+            end
+        end
+    end
+
 end
 
 @testset "FortranString{T} broadcasting     " begin
@@ -103,8 +126,6 @@ end
             @test (r = $S("abc").==$S("abd").==$S("cbd").=="cba".==$S("cba");  r) == BitVector([0,1,0])
             $T != Char && @test (r = $S("abc").+$S("ABC").-$S("abc"); (r, typeof(r))) == ($S("ABC"), $S)
             @test (r = $S("abc").+FortranString{UInt64}("ABC").-FortranString{UInt8}("abc");  r) == $S("ABC")
-            #$T != Char && @test (r = $S("abc").+   "ABC" .-$S("abc");  r) == $S("ABC")
-            #$T != Char && @test (r = $S("abc").+   "A"   .-$S("abc");  r) == $S("AAA")
             $T != Char && @test (r = $S("abc").+   'A'   .-$S("abc");  r) == $S("AAA")
             @test (r = $S("abc").+   0x41  .-$S("abc");  r) == $S("AAA")
             @test (r = $S("abc").+   65    .-$S("abc");  r) == $S("AAA")
