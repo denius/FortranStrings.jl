@@ -148,42 +148,56 @@ Base.similar(bc::Broadcasted{ForStrStyle}, ::Type{ElType}) where {ElType} = simi
 Base.similar(::Broadcasted{ForStrStyle}, ::Type{ElType}, dims) where {ElType} = similar(ForStr{ElType}, dims)
 Base.similar(::Broadcasted{ForStrStyle}, ::Type{Bool}, dims) = similar(BitArray, dims)
 
-#combine_eltypes(f, args::Tuple) = Base._return_type(f, eltypes(args))
+#@inline unrefeach(xs::Tuple) = tuple(map(x -> isa(x, Base.RefValue{String}) ? x[] : x, xs)...)
+@inline unref(x) = isa(x, Base.RefValue{String}) ? x[] : x
 
-const AllStringedTypes = Union{Number,AbstractChar,AbstractVector,AbstractString,Ref{<:AbstractString}}
+#const AllStringedTypes = Union{Number,AbstractChar,AbstractVector,AbstractString,Ref{<:AbstractString}}
 const AllCharTypes = Union{AbstractChar,AbstractString,Ref{<:AbstractString},AbstractVector{<:AbstractChar}}
 
 Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{Broadcasted,Broadcasted}}) =
     (@debug -3, bc, "restype: ", Broadcast.combine_eltypes(bc.f, bc.args);
      fortranstringbroadcast!(bc.f, similar(bc, Broadcast.combine_eltypes(bc.f, bc.args)), copy(bc.args[1]), copy(bc.args[2])))
 
-Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{Broadcasted,<:AllStringedTypes}}) =
+Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{Broadcasted,<:AllCharTypes}}) =
+    (@debug -2.5, bc, "restype: ", Broadcast.combine_eltypes(bc.f, bc.args);
+     fortranstringbroadcast!(bc.f, similar(bc, Broadcast.combine_eltypes(bc.f, (bc.args[1], Char))), copy(bc.args[1]), unref(bc.args[2])))
+Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{Broadcasted,<:Any}}) =
     (@debug -2, bc, "restype: ", Broadcast.combine_eltypes(bc.f, bc.args);
      fortranstringbroadcast!(bc.f, similar(bc, Broadcast.combine_eltypes(bc.f, bc.args)), copy(bc.args[1]), bc.args[2]))
 
-Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:AllStringedTypes,Broadcasted}}) =
+Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:AllCharTypes,Broadcasted}}) =
+    (@debug -1.5, bc, "restype: ", Broadcast.combine_eltypes(bc.f, bc.args);
+     fortranstringbroadcast!(bc.f, similar(bc, Broadcast.combine_eltypes(bc.f, (Char, bc.args[2]))), unref(bc.args[1]), copy(bc.args[2])))
+Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:Any,Broadcasted}}) =
     (@debug -1, bc, "restype: ", Broadcast.combine_eltypes(bc.f, bc.args);
      fortranstringbroadcast!(bc.f, similar(bc, Broadcast.combine_eltypes(bc.f, bc.args)), bc.args[1], copy(bc.args[2])))
 
-unrefeach(xs) = tuple(map(x -> isa(x, Base.RefValue{String}) ? x[] : x, xs)...)
-unref(x) = isa(x, Base.RefValue{String}) ? x[] : x
+Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:AllCharTypes,<:AllCharTypes}}) =
+    (@debug -0.8, bc, "restype: ", Broadcast.combine_eltypes(bc.f, bc.args);
+     fortranstringbroadcast!(bc.f, similar(bc, Broadcast.combine_eltypes(bc.f, (Char, Char))), unref(bc.args[1]), unref(bc.args[2])))
+Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:Any,<:AllCharTypes}}) =
+    (@debug -0.7, bc, "restype: ", Broadcast.combine_eltypes(bc.f, bc.args);
+     fortranstringbroadcast!(bc.f, similar(bc, Broadcast.combine_eltypes(bc.f, (bc.args[1], Char))), bc.args[1], unref(bc.args[2])))
+Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:AllCharTypes,<:Any}}) =
+    (@debug -0.6, bc, "restype: ", Broadcast.combine_eltypes(bc.f, bc.args);
+     fortranstringbroadcast!(bc.f, similar(bc, Broadcast.combine_eltypes(bc.f, (Char, bc.args[2]))), unref(bc.args[1]), bc.args[2]))
 
-function Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:AllStringedTypes,<:AllStringedTypes}})
-    @debug 0, bc, "restype: ", Broadcast.combine_eltypes(bc.f, bc.args)
-    @debug 0, bc, "restype: ", Broadcast.combine_eltypes(bc.f, unrefeach(bc.args))
-    if !(Broadcast.combine_eltypes(bc.f, bc.args) <: Union{})
-        return fortranstringbroadcast!(bc.f, similar(bc, Broadcast.combine_eltypes(bc.f, bc.args)), bc.args[1], bc.args[2])
-    else
-        @show bc.args[1], bc.args[2], bc.args
-        # unref strings
-        if xor(isa(bc.args[1], Base.RefValue{String}), isa(bc.args[2], Base.RefValue{String}))
-            return fortranstringbroadcast!(bc.f, similar(bc, Broadcast.combine_eltypes(bc.f, unrefeach(bc.args))), unref(bc.args[1]), unref(bc.args[2]))
-        else
-            # Both args are some type of `Char` thus the `combine_eltypes()` is `Union{}`
-            return fortranstringbroadcast!(bc.f, similar(bc, Char), bc.args[1], bc.args[2])
-        end
-    end
-end
+#function Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:AllStringedTypes,<:AllStringedTypes}})
+#    @debug 0, bc, "restype: ", Broadcast.combine_eltypes(bc.f, bc.args)
+#    @debug 0, bc, "restype: ", Broadcast.combine_eltypes(bc.f, unrefeach(bc.args))
+#    if !(Broadcast.combine_eltypes(bc.f, bc.args) <: Union{})
+#        return fortranstringbroadcast!(bc.f, similar(bc, Broadcast.combine_eltypes(bc.f, bc.args)), bc.args[1], bc.args[2])
+#    else
+#        @show bc.args[1], bc.args[2], bc.args
+#        # unref strings
+#        if xor(isa(bc.args[1], Base.RefValue{String}), isa(bc.args[2], Base.RefValue{String}))
+#            return fortranstringbroadcast!(bc.f, similar(bc, Broadcast.combine_eltypes(bc.f, unrefeach(bc.args))), unref(bc.args[1]), unref(bc.args[2]))
+#        else
+#            # Both args are some type of `Char` thus the `combine_eltypes()` is `Union{}`
+#            return fortranstringbroadcast!(bc.f, similar(bc, Char), bc.args[1], bc.args[2])
+#        end
+#    end
+#end
 
 Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:Any,<:Any}}) =
     (@debug "+1", bc, "restype: ", Broadcast.combine_eltypes(bc.f, bc.args)#=, bc[CartesianIndex()]=#;
@@ -201,29 +215,23 @@ Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:Any,<:Any}}) =
 #Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{ForStr,ForStr}}) =
 #    (@debug 0, bc; fortranstringbroadcast!(bc.f, similar(bc, Broadcast.combine_eltypes(bc.f, bc.args)), bc.args[1], bc.args[2]))
 
-Base.copyto!(dest::AbstractVector, bc::Broadcasted{ForStrStyle, <:Any, <:Any,
-                                                   <:Tuple{Broadcasted,Broadcasted}}) =
+Base.copyto!(dest::AbstractVector, bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{Broadcasted,Broadcasted}}) =
     # TODO: an unwanted copy is making here
     (@debug 1, dest, bc; return fortranstringbroadcast!(bc.f, dest, copyto!(dest, bc.args[1]), copy(bc.args[2])))
 
-Base.copyto!(dest::AbstractVector, bc::Broadcasted{ForStrStyle, <:Any, <:Any,
-                                                   <:Tuple{Broadcasted,<:Any}}) =
+Base.copyto!(dest::AbstractVector, bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{Broadcasted,<:Any}}) =
     (@debug 2, dest, bc; return fortranstringbroadcast!(bc.f, dest, copyto!(dest, bc.args[1]), bc.args[2]))
 
-Base.copyto!(dest::AbstractVector, bc::Broadcasted{ForStrStyle, <:Any, <:Any,
-                                                   <:Tuple{<:Any,Broadcasted}}) =
+Base.copyto!(dest::AbstractVector, bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:Any,Broadcasted}}) =
     (@debug 3, dest, bc; return fortranstringbroadcast!(bc.f, dest, bc.args[1], copyto!(dest, bc.args[2])))
 
-Base.copyto!(dest::AbstractVector, bc::Broadcasted{ForStrStyle, <:Any, <:Any,
-                                                   <:Tuple{<:Any,<:Any}}) =
+Base.copyto!(dest::AbstractVector, bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:Any,<:Any}}) =
     (@debug 4, dest, bc; return fortranstringbroadcast!(bc.f, dest, bc.args[1], bc.args[2]))
 
-Base.copyto!(dest::AbstractVector, bc::Broadcasted{ForStrStyle, <:Any, <:Any,
-                                                   <:Tuple{Broadcasted}}) =
+Base.copyto!(dest::AbstractVector, bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{Broadcasted}}) =
     (@debug 5, dest, bc; return fortranstringcopyto!(bc.f, dest, copyto!(dest, first(bc.args))))
 
-Base.copyto!(dest::AbstractVector, bc::Broadcasted{ForStrStyle, <:Any, <:Any,
-                                                   <:Tuple{<:Any}}) =
+Base.copyto!(dest::AbstractVector, bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:Any}}) =
     (@debug 6, dest, bc; return fortranstringcopyto!(bc.f, dest, bc.args[1]))
 
 # special case for `String` because it has `DefaultArrayStyle{0}`
