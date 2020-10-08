@@ -35,24 +35,21 @@ julia> s = F8"abc"; (s[1:1] == 'a', s[2:2] == "b")
 """
 struct FortranString{CharType} <: AbstractFortranString{CharType}
     data :: Vector{CharType}
-    dblquoted :: Bool
 end
 
 const ForStr = FortranString
 
-(::Type{ForStr{T}})(ch::AbstractChar) where {T} = ForStr{T}([T(ch)], false)
-(::Type{ForStr{T}})(a::AbstractArray) where {T} = ForStr{T}(vec(a), false)
+(::Type{ForStr{T}})(ch::AbstractChar) where {T} = ForStr{T}([T(ch)])
+(::Type{ForStr{T}})(::UndefInitializer, n) where {T} = ForStr{T}(Array{T}(undef, n))
 function (::Type{ForStr{T}})(s::AbstractString, flags::AbstractString = "") where {T}
-    for f in flags
-        f == 'd' && return ForStr{T}(map(T, collect(s)), true)
+    if length(flags) == 1 && (flags[1] == 'q' || flags[1] == 'Q')
+        return ForStr{T}(map(T, collect(replace(s, r"''" => "'"))))
+    elseif length(flags) == 0
+        return ForStr{T}(map(T, collect(replace(s, r"\"\"" => "\""))))
+    else
+        @error "Unrecognized string flag on $T initialization."
+        return ForStr{T}(map(T, collect(s)))
     end
-    return ForStr{T}(map(T, collect(s)), false)
-end
-function (::Type{ForStr{T}})(::UndefInitializer, n, flags::AbstractString = "") where {T}
-    for f in flags
-        f == 'd' && return ForStr{T}(Array{T}(undef, n), true)
-    end
-    return ForStr{T}(Array{T}(undef, n), false)
 end
 
 Base.convert(A::Type{AbstractFortranString}, s::AbstractString) = A(s)
@@ -132,15 +129,20 @@ Base.Broadcast.BroadcastStyle(::Type{<:ForStr}) = ForStrStyle()
 
 function Base.Broadcast.instantiate(bc::Broadcasted{ForStrStyle})
     if bc.axes isa Nothing
-        axes = Broadcast.combine_axes(bc.args...)
-        @debug "instantiate Nothing", bc, axes
+        @debug "instantiate bc.axes == nothing", bc, bc.axes
+        #if isempty(min(map(axes, bc.args)...)) || ==(map(axes, bc.args)...)
+            bcaxes = Broadcast.combine_axes(bc.args...)
+        #else
+        #    bcaxes = min(map(axes, bc.args)...)
+        #end
+        @debug bcaxes
     else
-        axes = bc.axes
-        @debug "instantiate", bc, axes
+        bcaxes = bc.axes
+        @debug "instantiate", bc, bcaxes, bc.axes
         # FortranString is flexible in assignment in any direction thus any sizes are allowed
         #check_broadcast_axes(axes, bc.args...)
     end
-    return Broadcasted{ForStrStyle}(bc.f, bc.args, axes)
+    return Broadcasted{ForStrStyle}(bc.f, bc.args, bcaxes)
 end
 Base.similar(bc::Broadcasted{ForStrStyle}, ::Type{ElType}) where {ElType} = similar(bc, ElType, axes(bc))
 Base.similar(::Broadcasted{ForStrStyle}, ::Type{ElType}, dims) where {ElType} = similar(ForStr{ElType}, dims)
@@ -148,7 +150,8 @@ Base.similar(::Broadcasted{ForStrStyle}, ::Type{Bool}, dims) = similar(BitArray,
 
 #combine_eltypes(f, args::Tuple) = Base._return_type(f, eltypes(args))
 
-const AllStringedTypes = Union{Number,AbstractChar,AbstractVector,AbstractString}
+const AllStringedTypes = Union{Number,AbstractChar,AbstractVector,AbstractString,Ref{<:AbstractString}}
+const AllCharTypes = Union{AbstractChar,AbstractString,Ref{<:AbstractString},AbstractVector{<:AbstractChar}}
 
 Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{Broadcasted,Broadcasted}}) =
     (@debug -3, bc, "restype: ", Broadcast.combine_eltypes(bc.f, bc.args);
@@ -162,9 +165,25 @@ Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:AllStringedTypes,
     (@debug -1, bc, "restype: ", Broadcast.combine_eltypes(bc.f, bc.args);
      fortranstringbroadcast!(bc.f, similar(bc, Broadcast.combine_eltypes(bc.f, bc.args)), bc.args[1], copy(bc.args[2])))
 
-Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:AllStringedTypes,<:AllStringedTypes}}) =
-    (@debug 0, bc, "restype: ", Broadcast.combine_eltypes(bc.f, bc.args);
-     fortranstringbroadcast!(bc.f, similar(bc, Broadcast.combine_eltypes(bc.f, bc.args)), bc.args[1], bc.args[2]))
+unrefeach(xs) = tuple(map(x -> isa(x, Base.RefValue{String}) ? x[] : x, xs)...)
+unref(x) = isa(x, Base.RefValue{String}) ? x[] : x
+
+function Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:AllStringedTypes,<:AllStringedTypes}})
+    @debug 0, bc, "restype: ", Broadcast.combine_eltypes(bc.f, bc.args)
+    @debug 0, bc, "restype: ", Broadcast.combine_eltypes(bc.f, unrefeach(bc.args))
+    if !(Broadcast.combine_eltypes(bc.f, bc.args) <: Union{})
+        return fortranstringbroadcast!(bc.f, similar(bc, Broadcast.combine_eltypes(bc.f, bc.args)), bc.args[1], bc.args[2])
+    else
+        @show bc.args[1], bc.args[2], bc.args
+        # unref strings
+        if xor(isa(bc.args[1], Base.RefValue{String}), isa(bc.args[2], Base.RefValue{String}))
+            return fortranstringbroadcast!(bc.f, similar(bc, Broadcast.combine_eltypes(bc.f, unrefeach(bc.args))), unref(bc.args[1]), unref(bc.args[2]))
+        else
+            # Both args are some type of `Char` thus the `combine_eltypes()` is `Union{}`
+            return fortranstringbroadcast!(bc.f, similar(bc, Char), bc.args[1], bc.args[2])
+        end
+    end
+end
 
 Base.copy(bc::Broadcasted{ForStrStyle, <:Any, <:Any, <:Tuple{<:Any,<:Any}}) =
     (@debug "+1", bc, "restype: ", Broadcast.combine_eltypes(bc.f, bc.args)#=, bc[CartesianIndex()]=#;
@@ -408,16 +427,24 @@ end
     SCAN(s, charset, back)
 
 """
-    F"some Char string"
+    F"some string"
 
-String macro for `FortranString{Char}`.
+String macro for `FortranString{Char}("some string")`.
+
+The 'q' flag can be used to declare fortran strings in single quotes,
+where quotes within such strings should be escaped by doubling ones:
+    F"Can''t be with only single quote"q
 """
 macro F_str(s, flags...) ; FortranString{Char}(s, flags...) ; end
 
 """
-    F8"some UInt8 string"
+    F8"some string"
 
 String macro for compatible with FORTRAN strings `FortranString{UInt8}`.
+
+The 'q' flag can be used to declare fortran strings in single quotes,
+where quotes within such strings should be escaped by doubling ones:
+    F8"Can''t be with only single quote"q
 """
 macro F8_str(s, flags...) ; FortranString{UInt8}(s, flags...) ; end
 

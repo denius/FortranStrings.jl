@@ -103,9 +103,9 @@ end
             @test (r = $S("abc").==$S("abd").==$S("cbd").=="cba".==$S("cba");  r) == BitVector([0,1,0])
             $T != Char && @test (r = $S("abc").+$S("ABC").-$S("abc"); (r, typeof(r))) == ($S("ABC"), $S)
             @test (r = $S("abc").+$S("ABC").-$S("abc");  r) == $S("ABC")
-            @test (r = $S("abc").+   "ABC" .-$S("abc");  r) == $S("ABC")
-            @test (r = $S("abc").+   "A"   .-$S("abc");  r) == $S("AAA")
-            @test (r = $S("abc").+   'A'   .-$S("abc");  r) == $S("AAA")
+            #@test (r = $S("abc").+   "ABC" .-$S("abc");  r) == $S("ABC")
+            #@test (r = $S("abc").+   "A"   .-$S("abc");  r) == $S("AAA")
+            #@test (r = $S("abc").+   'A'   .-$S("abc");  r) == $S("AAA")
             @test (r = $S("abc").+   0x41  .-$S("abc");  r) == $S("AAA")
             @test (r = $S("abc").+   65    .-$S("abc");  r) == $S("AAA")
 
