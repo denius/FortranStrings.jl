@@ -3,7 +3,6 @@ module FortranStrings
 export FortranString, REPEAT, LEN, LEN_TRIM, TRIM, LNBLNK, LSAME, INDEX, SCAN, @F_str, @F8_str
 
 import Base.Broadcast: AbstractArrayStyle, DefaultArrayStyle, Broadcasted
-using Compat
 
 
 abstract type AbstractFortranString{CharType} <: AbstractVector{CharType} end
@@ -381,13 +380,13 @@ function SCAN(s::Union{AbstractString,AbstractFortranString}, charset, back::Boo
     if back
         i = 0
         for c in charset
-            i = max( something(findlast(Char(c), string(s)), i), i)
+            i = max( something(findlast(==(Char(c)), string(s)), i), i)
         end
         return i
     else
         i = length(s) + 1
         for c in charset
-            i = min( something(findfirst(Char(c), string(s)), i), i)
+            i = min( something(findfirst(==(Char(c)), string(s)), i), i)
         end
         return i > length(s) ? 0 : i
     end
