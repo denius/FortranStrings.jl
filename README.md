@@ -58,7 +58,7 @@ In Fortran strings, the quotes with which the strings were created must be escap
 julia> str = F"Should be \"\"doubled\"\""d
 F"Should be \"doubled\""
 ```
-Otherwise, without the flag, the single quotes can be doubled: `F"Can''t be with only single quote inside"`.
+Otherwise, without the flag, the single quotes can be doubled:
 ```julia
 julia> s = F"Can''t be with only single quote inside"
 F"Can't be with only single quote inside"
