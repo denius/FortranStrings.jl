@@ -3,6 +3,9 @@ uuid = "fc18e7c4-0b83-4f3c-b75e-a9a8c77010a4"
 authors = ["Denis Telnov <denis.telnov@gmail.com> and contributors"]
 version = "0.1.0"
 
+[deps]
+Compat = "34da2185-b29b-5c13-b0c7-acf172513d20"
+
 [compat]
 julia = "1"
 

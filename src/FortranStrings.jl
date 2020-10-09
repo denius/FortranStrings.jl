@@ -3,6 +3,7 @@ module FortranStrings
 export FortranString, REPEAT, LEN, LEN_TRIM, TRIM, LNBLNK, LSAME, INDEX, SCAN, @F_str, @F8_str
 
 import Base.Broadcast: AbstractArrayStyle, DefaultArrayStyle, Broadcasted
+using Compat
 
 
 abstract type AbstractFortranString{CharType} <: AbstractVector{CharType} end
