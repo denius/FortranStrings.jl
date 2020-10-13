@@ -64,6 +64,7 @@ julia> s = F"Can''t be with only single quote inside"
 F"Can't be with only single quote inside"
 ```
 Although, in both cases, the escaping-doubling is not necessary when using the `q` or` qq` flags, because single `'` or `"` produce single ones.
+
 All this escaping only works when the `FortranString` is created from `String`, and this does not apply when a string is created from an `Vector`:
 ```julia
 julia> FortranString{Char}([0x27, 0x27, 0x61, 0x62, 0x63, 0x27, 0x27])
