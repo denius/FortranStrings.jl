@@ -45,13 +45,13 @@ const ForStr = FortranString
 (::Type{ForStr{T}})(::UndefInitializer, n) where {T} = ForStr{T}(Array{T}(undef, n))
 function (::Type{ForStr{T}})(s::AbstractString, flags::AbstractString = "") where {T}
     if length(flags) == 0
+        return ForStr{T}(map(T, collect(s)))
+    elseif lowercase(flags) == "q"
         return ForStr{T}(map(T, collect(replace(s, "''" => "'"))))
-    elseif length(flags) == 1 && lowercase(flags[1]) == 'd' ||
-           length(flags) == 2 && lowercase(flags[1]) == 'q' && lowercase(flags[2]) == 'q'
+    elseif lowercase(flags) == "qq" || lowercase(flags) == "d"
         return ForStr{T}(map(T, collect(replace(s, "\"\"" => "\""))))
     else
         throw(ArgumentError("unknown FortranString flag: $flags"))
-        return ForStr{T}(map(T, collect(s)))
     end
 end
 
@@ -399,14 +399,14 @@ end
 
 String macro for `FortranString{Char}("some string")`.
 
-The `'d'` and `"qq"` flag can be used to declare fortran strings in double quotes,
+The `'d'` and `"qq"` flag can be used to emulate behaviour fortran strings in double quotes,
 where the double quotes inside such strings must be doubled:
 
-    F"Use \\"\\"doubled\\"\\""d
+    F8"Use \\"\\"doubled\\"\\""qq
 
-Otherwise, without a flag, it is assumed that the string is enclosed in single quotes and
+The `'q'` flag indicates the emulation of Fortran strings in single quotes:
 
-    F"Can''t be with only single quote inside"
+    F8"Can''t be with only single quote inside"q
 
 """
 macro F_str(s, flags...) ; FortranString{Char}(s, flags...) ; end
@@ -416,14 +416,14 @@ macro F_str(s, flags...) ; FortranString{Char}(s, flags...) ; end
 
 String macro for compatible with FORTRAN strings `FortranString{UInt8}`.
 
-The `'d'` and `"qq"` flag can be used to declare fortran strings in double quotes,
+The `'d'` and `"qq"` flag can be used to emulate behaviour fortran strings in double quotes,
 where the double quotes inside such strings must be doubled:
 
-    F8"Use \\"\\"doubled\\"\\""d
+    F8"Use \\"\\"doubled\\"\\""qq
 
-Otherwise, without a flag, it is assumed that the string is enclosed in single quotes and
+The `'q'` flag indicates the emulation of Fortran strings in single quotes:
 
-    F8"Can''t be with only single quote inside"
+    F8"Can''t be with only single quote inside"q
 
 """
 macro F8_str(s, flags...) ; FortranString{UInt8}(s, flags...) ; end

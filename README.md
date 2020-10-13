@@ -53,17 +53,18 @@ F8"FAB"
 Internally, the `FortranString{T}` is just a wrapper for `Vector{T}` with a bunch of broadcasting routines.
 
 ## Quotes escaping
-In Fortran strings, the quotes with which the strings were created must be escaped by doubling, for example Fortran's: `'Can''t be with only single quote inside'` or `"Should be ""doubled"""`. To simplify conversion from Fortran the escape flag `d` has been introduced:
+In Fortran strings, the quotes with which the strings were created must be escaped by doubling, for example Fortran's: `'Can''t be with only single quote inside'` or `"Should be ""doubled"""`. To simplify conversion from Fortran the escape flag `qq` or `d` has been introduced:
 ```julia
 julia> str = F"Should be \"\"doubled\"\""d
 F"Should be \"doubled\""
 ```
-Otherwise, without the flag, the single quotes can be doubled:
+Similarly, using the `q` flag, single quotes should be doubled:
 ```julia
 julia> s = F"Can''t be with only single quote inside"
 F"Can't be with only single quote inside"
 ```
-Although escaping is not necessary, you should remember that double `''` will give only single `'`, and the same for `\"\"` with `d` flag, when `FortranString` is created from `String`. This does not apply when a string is created from an vector:
+Although, in both cases, the escaping-doubling is not necessary when using the `q` or` qq` flags, because single `'` or `"` produce single ones.
+All this escaping only works when the `FortranString` is created from `String`, and this does not apply when a string is created from an `Vector`:
 ```julia
 julia> FortranString{Char}([0x27, 0x27, 0x61, 0x62, 0x63, 0x27, 0x27])
 F"''abc''"
